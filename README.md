@@ -1,5 +1,11 @@
 # kstuff + A53/PPR
 
+## Download
+
+**[Baixar o ELF testado no FW 5.00](https://github.com/EliasSamuca/kstuff-a53/releases/download/fw5-tested-source/kstuff-a53-fast-klog-experimental.elf)** · [Ver informações da versão e código-fonte](https://github.com/EliasSamuca/kstuff-a53/releases/tag/fw5-tested-source)
+
+SHA-256: `9d0cadca3664d861b1e7d23fef22ca6d9e5e20b4dc634e6a21b91238dbe68686`. A versão é experimental; veja na página da Release o firmware validado e as observações de compilação.
+
 Integração em código-fonte do carregador **kstuff-lite** com a instalação dos patches **PPR/A53**. O resultado da compilação é um único `kstuff.elf`: a rotina A53/PPR é executada no início de `ps5-kstuff-ldr/src/main.c` e, após sucesso, o carregador inicia o kstuff. Não há um segundo ELF anexado ou executado internamente.
 
 Este repositório contém **somente kstuff + A53/PPR**. versao do Fkpg suportado ate a 11.40
@@ -31,10 +37,6 @@ O arquivo gerado fica em `ps5-kstuff-ldr/kstuff.elf`. Se o SDK estiver em outro 
 3. Carrega o payload do kstuff e aplica as etapas normais do loader.
 
 Os tempos de cada etapa podem ser observados no klog com prefixo `[TIME]` e, quando disponível, em `/data/kstuff-startup.log`.
-
-## ELF testado no FW 5.00
-
-O arquivo usado no teste do console está em [`artifacts/fw5/kstuff-a53-fast-klog-experimental.elf`](artifacts/fw5/kstuff-a53-fast-klog-experimental.elf). Confira o hash SHA-256 e a diferença entre essa versão e a branch `main` em [`artifacts/fw5/README.md`](artifacts/fw5/README.md).
 
 ## Origens e créditos
 
