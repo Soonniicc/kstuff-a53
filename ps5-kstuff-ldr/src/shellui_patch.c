@@ -14,6 +14,7 @@
 #include <ps5/mdbg.h>
 
 #include "utils.h"
+#include "ppr/ppr_resume.h"
 
 enum { PID_LOOKUP_ERROR = -2, PID_NOT_FOUND = -1 };
 #define SHELLUI_EVENT_RETRY_CHECKS 5
@@ -283,7 +284,8 @@ typedef struct app_info {
 
 int sceKernelGetAppInfo(pid_t pid, app_info_t *info);
 
-static bool patch_new_shellui(pid_t pid, pid_t *patched_pid) {
+static bool patch_new_shellui(pid_t pid, pid_t *patched_pid,
+                              bool *seen_shellui) {
     if (pid <= 0 || pid == *patched_pid) {
         return true;
     }
@@ -294,11 +296,16 @@ static bool patch_new_shellui(pid_t pid, pid_t *patched_pid) {
     }
 
     *patched_pid = pid;
+    if (*seen_shellui)
+        ppr_resume_request();
+    else
+        *seen_shellui = true;
     return true;
 }
 
 static void *shellui_patch_thread(void *arg) {
     pid_t patched_pid = -1;
+    bool seen_shellui = false;
     pid_t syscore_pid = -1;
     int retry_checks = 0;
     bool retry_until_patched = false;
@@ -322,7 +329,7 @@ static void *shellui_patch_thread(void *arg) {
                 pid_t shellui_pid = find_pid("SceShellUI");
                 if (shellui_pid > 0) {
                     retry_until_patched = !patch_new_shellui(shellui_pid,
-                                                               &patched_pid);
+                                                               &patched_pid, &seen_shellui);
                     retry_checks = 0;
                 }
                 sleep(1);
@@ -345,7 +352,7 @@ static void *shellui_patch_thread(void *arg) {
             pid_t shellui_pid = find_pid("SceShellUI");
             if (shellui_pid > 0) {
                 retry_until_patched = !patch_new_shellui(shellui_pid,
-                                                           &patched_pid);
+                                                           &patched_pid, &seen_shellui);
                 retry_checks = 0;
             } else if (shellui_pid == PID_LOOKUP_ERROR) {
                 retry_until_patched = true;
@@ -376,7 +383,7 @@ static void *shellui_patch_thread(void *arg) {
                 retry_checks = 0;
             } else if (shellui_pid > 0 && shellui_pid != patched_pid) {
                 retry_until_patched = !patch_new_shellui(shellui_pid,
-                                                           &patched_pid);
+                                                           &patched_pid, &seen_shellui);
                 retry_checks = 0;
             } else {
                 if (shellui_pid > 0 && shellui_pid == patched_pid) {
@@ -432,7 +439,7 @@ static void *shellui_patch_thread(void *arg) {
         }
         if (strncmp(appinfo.title_id, "NPXS40087",
                     sizeof(appinfo.title_id)) == 0) {
-            retry_until_patched = !patch_new_shellui(new_pid, &patched_pid);
+            retry_until_patched = !patch_new_shellui(new_pid, &patched_pid, &seen_shellui);
             retry_checks = 0;
         } else if (appinfo.title_id[0] == '\0') {
             // The title ID may not be ready at the instant NOTE_EXEC fires.
