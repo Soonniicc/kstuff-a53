@@ -33,6 +33,8 @@ LDFLAGS += -lz \
            -lSceAppInstUtil \
            -lSceFsInternalForVsh \
            -lsqlite3 \
+           -lSceSysCore \
+           -lkernel_sys \
 		   -Wl,-s
 
 # Automatically grab all .c files in src/
