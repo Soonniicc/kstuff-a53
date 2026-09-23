@@ -32,6 +32,10 @@ O arquivo gerado fica em `ps5-kstuff-ldr/kstuff.elf`. Se o SDK estiver em outro 
 
 Os tempos de cada etapa podem ser observados no klog com prefixo `[TIME]` e, quando disponível, em `/data/kstuff-startup.log`.
 
+## ELF testado no FW 5.00
+
+O arquivo usado no teste do console está em [`artifacts/fw5/kstuff-a53-fast-klog-experimental.elf`](artifacts/fw5/kstuff-a53-fast-klog-experimental.elf). Confira o hash SHA-256 e a diferença entre essa versão e a branch `main` em [`artifacts/fw5/README.md`](artifacts/fw5/README.md).
+
 ## Origens e créditos
 
 - [EchoStretch/kstuff-lite](https://github.com/EchoStretch/kstuff-lite): projeto base e histórico Git preservado neste fork; base usada: `2506a5b15af501734f7ea3dce2759c077cdb76c6`.
