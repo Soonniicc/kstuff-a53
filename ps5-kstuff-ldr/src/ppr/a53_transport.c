@@ -1311,13 +1311,6 @@ static uint64_t callback_ticks(void *context) {
 int a53_transport_initialize(const struct a53_transport_options *options) {
     if (!options)
         return -1;
-    /* Resume may invalidate mailbox addresses saved by the first install. */
-    g_initialized = 0;
-    g_state_addr = 0;
-    g_flags_addr = 0;
-    g_buffer_slot = 0;
-    g_iommu_slot = 0;
-    g_size_slot = 0;
     g_persistent = options->persistent;
     g_batch = options->batch;
     g_mixed_io = options->mixed_io;
