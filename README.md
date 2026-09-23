@@ -2,7 +2,7 @@
 
 Integração em código-fonte do carregador **kstuff-lite** com a instalação dos patches **PPR/A53**. O resultado da compilação é um único `kstuff.elf`: a rotina A53/PPR é executada no início de `ps5-kstuff-ldr/src/main.c` e, após sucesso, o carregador inicia o kstuff. Não há um segundo ELF anexado ou executado internamente.
 
-Este repositório contém **somente kstuff + A53/PPR**. BackPork não faz parte desta versão.
+Este repositório contém **somente kstuff + A53/PPR**. versao do Fkpg suportado ate a 11.40
 
 ## Estado dos testes
 
