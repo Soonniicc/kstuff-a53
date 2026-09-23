@@ -1,0 +1,4 @@
+#ifndef KSTUFF_PPR_INSTALL_BRIDGE_H
+#define KSTUFF_PPR_INSTALL_BRIDGE_H
+int run_ppr_install(void);
+#endif

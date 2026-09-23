@@ -1,3 +1,4 @@
+#include "ppr/ppr_install_bridge.h"
 /* Copyright (C) 2025 John Törnblom
 
 This program is free software; you can redistribute it and/or modify it
@@ -25,6 +26,7 @@ along with this program; see the file COPYING. If not, see
 #include <signal.h>
 #include <limits.h>
 #include <stdbool.h>
+#include <sys/time.h>
 
 #include <sys/mman.h>
 #include <sys/_iovec.h>
@@ -521,7 +523,30 @@ pt_load(const void* image, void* base, Elf64_Phdr *phdr) {
   }
 }
 
+static uint64_t loader_now_ms(void) {
+    struct timeval tv;
+    gettimeofday(&tv, NULL);
+    return (uint64_t)tv.tv_sec * 1000 + (uint64_t)tv.tv_usec / 1000;
+}
+
+static void loader_stage(const char *name, uint64_t began_ms) {
+    unsigned long long elapsed = (unsigned long long)(loader_now_ms() - began_ms);
+    FILE *log = fopen("/data/kstuff-startup.log", "a");
+    if (log) {
+        fprintf(log, "[TIME] %s: %llu ms\n", name, elapsed);
+        fclose(log);
+    }
+    klog_printf("[TIME] %s: %llu ms\n", name, elapsed);
+}
+
 int main(void) {
+    uint64_t startup_ms = loader_now_ms();
+    uint64_t stage_ms = startup_ms;
+    loader_stage("start", startup_ms);
+    if (run_ppr_install() != 0)
+        return EXIT_FAILURE;
+    loader_stage("A53/PPR and loader", stage_ms);
+    stage_ms = loader_now_ms();
     sceKernelSetProcessName("kstuff.elf");
     Elf64_Ehdr *ehdr = (Elf64_Ehdr*)___ps5_kstuff_payload_bin;
     Elf64_Phdr *phdr = (Elf64_Phdr*)(___ps5_kstuff_payload_bin + ehdr->e_phoff);
@@ -582,13 +607,19 @@ int main(void) {
     kernel_setlong(eboot_segments + 0x08, 0); // addr
     kernel_setlong(eboot_segments + 0x10, 0xFFFFFFFFFFFFFFFFL); // size
 
+    loader_stage("prepare kstuff", stage_ms);
+    stage_ms = loader_now_ms();
     entry(args, KSTUFF_DYNLIB_RESOLVER_MAGIC,
           kernel_dynlib_resolve, kernel_dynlib_handle,
           shellcore_import_got);
+    loader_stage("kstuff entry", stage_ms);
+    stage_ms = loader_now_ms();
     if(*args->payloadout == 0) {
         puts("patching app.db");
         *args->payloadout = patch_app_db();
     }
+    loader_stage("app.db", stage_ms);
+    loader_stage("total to kstuff ready", startup_ms);
     start_shellui_patch_thread();
 
     monitor_usb_changes();
