@@ -147,6 +147,7 @@ static int g_atexit_registered;
 static uint64_t g_transactions;
 static uint64_t g_transport_opens;
 static uint64_t g_elapsed_ticks;
+static int (*g_power_guard)(void);
 
 static struct clock_override_state {
     uint64_t hz_addr;
@@ -663,6 +664,10 @@ static int open_persistent_transport(void) {
 static int send_packet(struct deci5s_hdr *packet, uint32_t packet_length,
                        const void *data, uint32_t data_length,
                        struct sdbgp_packet_result *response) {
+    if (g_power_guard && !g_power_guard()) {
+        klog_printf("[PPR] resume: power state changed; transport refused\n");
+        return -1;
+    }
     uint64_t started = sceKernelReadTsc();
     uint64_t original_auth = swap_auth(SYSCORE_AUTH_ID);
     int result = -1;
@@ -1309,14 +1314,26 @@ static uint64_t callback_ticks(void *context) {
 }
 
 int a53_transport_initialize(const struct a53_transport_options *options) {
-    if (!options)
+    if (!options || g_clock_override.active ||
+        (g_power_guard && !g_power_guard()))
         return -1;
+    /* A53 mailbox and clock addresses must be rediscovered after rest. */
+    a53_transport_shutdown();
+    g_initialized = 0;
+    g_mp4sc = g_zcn_bar2 = 0;
+    g_state_addr = g_flags_addr = g_buffer_slot = 0;
+    g_iommu_slot = g_size_slot = 0;
+    memset(&g_clock_override, 0, sizeof(g_clock_override));
     g_persistent = options->persistent;
     g_batch = options->batch;
     g_mixed_io = options->mixed_io;
     if (find_mp4_device() != 0)
         return -1;
     return initialize_mailbox();
+}
+
+void a53_transport_set_power_guard(int (*guard)(void)) {
+    g_power_guard = guard;
 }
 
 int a53_transport_get_version(char *out, uint32_t out_size) {

@@ -19,5 +19,6 @@ int a53_transport_verify_and_enable_fast(
     const struct a53_transport_options *requested);
 void a53_transport_make_ppr(struct ppr_patch_transport *out, int fast_mode);
 void a53_transport_shutdown(void);
+void a53_transport_set_power_guard(int (*guard)(void));
 
 #endif

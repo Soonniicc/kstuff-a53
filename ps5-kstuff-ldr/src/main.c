@@ -1,4 +1,5 @@
 #include "ppr/ppr_install_bridge.h"
+#include "ppr/ppr_resume.h"
 /* Copyright (C) 2025 John Törnblom
 
 This program is free software; you can redistribute it and/or modify it
@@ -620,6 +621,8 @@ int main(void) {
     }
     loader_stage("app.db", stage_ms);
     loader_stage("total to kstuff ready", startup_ms);
+    if (ppr_resume_start() != 0)
+        klog_printf("[PPR] resume: power monitor unavailable\n");
     start_shellui_patch_thread();
 
     monitor_usb_changes();

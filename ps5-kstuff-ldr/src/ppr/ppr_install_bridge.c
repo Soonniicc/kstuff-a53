@@ -26,7 +26,7 @@ static void startup_stage(const char *name, uint64_t began_ms) {
     klog_printf("[TIME] %s: %llu ms\n", name, elapsed);
 }
 
-int run_ppr_install(void) {
+static int run_ppr_install_impl(int resumed) {
     uint64_t total_ms = startup_now_ms();
     uint64_t stage_ms = total_ms;
     struct rlimit limit;
@@ -51,12 +51,14 @@ int run_ppr_install(void) {
     stage_ms = startup_now_ms();
     /* Use the upstream phase5 accelerator only after its exact kernel clock
        pair has been located and verified. Fail closed if validation fails. */
-    if (a53_transport_enable_time_acceleration() != 0) {
-        ppr_puts("[PPR] Verified time acceleration unavailable; refusing fast install");
-        klog_printf("[TIME] A53 clock validation failed; kstuff not started\n");
-        goto done;
+    if (!resumed) {
+        if (a53_transport_enable_time_acceleration() != 0) {
+            ppr_puts("[PPR] Verified time acceleration unavailable; refusing fast install");
+            klog_printf("[TIME] A53 clock validation failed; kstuff not started\n");
+            goto done;
+        }
+        startup_stage("A53 clock scan", stage_ms);
     }
-    startup_stage("A53 clock scan", stage_ms);
     stage_ms = startup_now_ms();
     if (a53_transport_get_version(version, sizeof(version)) != 0) {
         ppr_puts("[PPR] GET_CONF failed");
@@ -93,7 +95,17 @@ int run_ppr_install(void) {
     klog_printf("[TIME] PPR install result: %d\n", result);
 done:
     a53_transport_shutdown();
+    if (resumed)
+        a53_transport_set_power_guard(NULL);
     ppr_notify_flush();
     startup_stage("A53/PPR total", total_ms);
     return result == 0 ? 0 : -1;
+}
+
+int run_ppr_install(void) {
+    return run_ppr_install_impl(0);
+}
+
+int run_ppr_install_after_resume(void) {
+    return run_ppr_install_impl(1);
 }
