@@ -159,8 +159,9 @@ static char* find_random_folder(const char* title_id, int sandbox_num) {
 
         struct stat st;
         if (stat(full_path, &st) == 0 && S_ISDIR(st.st_mode)) {
+            char *folder = strdup(entry->d_name);
             closedir(dir);
-            return strdup(entry->d_name);
+            return folder;
         }
     }
 
