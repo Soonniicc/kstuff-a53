@@ -3,6 +3,7 @@
 #include <sys/types.h>
 #include <dirent.h>
 #include <errno.h>
+#include <fcntl.h>
 #include <limits.h>
 #include <pthread.h>
 #include <time.h>
@@ -227,7 +228,15 @@ static void release_game(bp_game_t *game) {
 }
 
 int backpork_main(void) {
-    BP_LOG("native NOTE_TRACK monitor started pid=%d\n", getpid());
+    int lock_fd = open("/data/kstuff-backpork-monitor.lock",
+                       O_RDWR | O_CREAT, 0600);
+    if (lock_fd < 0 || flock(lock_fd, LOCK_EX | LOCK_NB) != 0) {
+        BP_LOG("monitor already active or lock unavailable pid=%d errno=%d\n",
+               getpid(), errno);
+        if (lock_fd >= 0) close(lock_fd);
+        return -1;
+    }
+    BP_LOG("native singleton monitor started pid=%d\n", getpid());
     for (;;) {
         pid_t syscore = find_pid("SceSysCore.elf");
         if (syscore < 0) { sleep(1); continue; }
@@ -259,16 +268,35 @@ int backpork_main(void) {
                 BP_LOG("syscore exited pid=%d\n", syscore);
                 break;
             }
-            if (event.fflags & NOTE_CHILD) {
-                if (!game_slot(games, pid, 1))
-                    BP_LOG("game table full pid=%d\n", pid);
-                else
-                    BP_LOG("child tracked pid=%d\n", pid);
-            }
             if (event.fflags & NOTE_EXIT) {
                 bp_game_t *game = game_slot(games, pid, 0);
                 if (game) release_game(game);
                 continue;
+            }
+            if (event.fflags & NOTE_CHILD) {
+                bp_game_t *game = game_slot(games, pid, 1);
+                if (!game) {
+                    BP_LOG("game table full pid=%d\n", pid);
+                } else {
+                    app_info_t info = {0};
+                    if (sceKernelGetAppInfo(pid, &info) == 0) {
+                        char title[10] = {0};
+                        memcpy(title, info.title_id, 9);
+                        if (!strncmp(title, "PPSA", 4) ||
+                            !strncmp(title, "CUSA", 4)) {
+                            for (int attempt = 0; attempt < 20; ++attempt) {
+                                game->mount_path = try_mount_game(pid, title, games);
+                                if (game->mount_path) {
+                                    BP_LOG("mounted before exec pid=%d title=%s attempt=%d dst=%s\n",
+                                           pid, title, attempt, game->mount_path);
+                                    break;
+                                }
+                                struct timespec pause = {0, 1000000};
+                                nanosleep(&pause, NULL);
+                            }
+                        }
+                    }
+                }
             }
             if (event.fflags & NOTE_EXEC) {
                 bp_game_t *game = game_slot(games, pid, 0);
