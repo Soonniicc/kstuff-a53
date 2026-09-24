@@ -7,3 +7,9 @@ Esta versão inclui a tentativa de montagem antecipada da v6. Nenhuma alteraçã
 Teste esperado no log após retorno: `[BP] resume: rearm requested`, `[BP] resume: rebuilding SysCore watch`, `[BP] resume: BackPork monitor rearmed`, e, ao lançar jogo com `fakelib`, `[BP] mounted before exec` seguido de `[BP] resume: BackPork early mount confirmed`. A notificação confirma que houve montagem antecipada; não garante que o jogo continuará sem outros erros.
 
 Build com PS5 SDK e `-Wall -Werror`: sucesso. ELF: `C:\Users\PC\Downloads\kstuff-a53-backpork-RESUME-v7-EXPERIMENTAL.elf`, SHA-256 `42ba90cfe1f5b7a9f3bf83d3ca025aab479b7c2e53b224e891b479774436fb98`. Ainda não validado no console. A notificação pode deixar de aparecer se nenhum jogo com `fakelib` for iniciado após o repouso ou se a montagem antecipada falhar; nesse caso o klog diferencia monitor rearmado de montagem não confirmada.
+
+## Resultado no console após repouso
+
+O `C:\Users\PC\Music\putty.log` iniciado em 2026-09-24 07:08:58 confirma a retomada do monitor na geração 2: `rearm requested`, `rebuilding SysCore watch` e `BackPork monitor rearmed syscore=53`. `[PPR] resume: patch verified` precedeu o lançamento dos jogos. `PPSA17221` montou `fakelib` antes do `EXEC` (pid 195, attempt 0), registrou `BackPork early mount confirmed` e desmontou com `rc=0 errno=0` ao fechar. `PPSA28180` também montou antes do `EXEC` (pid 207, attempt 0) e desmontou com `rc=0 errno=0`. Não foram encontrados `PRX_NOT_RESOLVED_FUNCTION`, sinal fatal nem os erros de I/O do teste anterior no registro analisado. O usuário informou que os jogos funcionaram. O klog confirma o caminho de montagem; a exibição da notificação gráfica ainda não foi confirmada pelo usuário.
+
+Esse teste confirma rearmamento e montagem dos dois títulos nessa sessão. Ainda não estabelece estabilidade em todos os ciclos de repouso/reinício ou para todos os jogos.
