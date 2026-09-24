@@ -27,6 +27,7 @@ along with this program; see the file COPYING. If not, see
 #include <signal.h>
 #include <limits.h>
 #include <stdbool.h>
+#include <pthread.h>
 #include <sys/time.h>
 
 #include <sys/mman.h>
@@ -624,6 +625,16 @@ int main(void) {
     if (ppr_resume_start() != 0)
         klog_printf("[PPR] resume: power monitor unavailable\n");
     start_shellui_patch_thread();
+
+    /* BestPig/BackPork runs as a native thread in this ELF. */
+    extern void *backpork_thread_entry(void *);
+    pthread_t backpork_thread;
+    int bp_error = pthread_create(&backpork_thread, NULL,
+                                  backpork_thread_entry, NULL);
+    if (bp_error == 0)
+        pthread_detach(backpork_thread);
+    else
+        klog_printf("[BP] monitor start failed: %d\n", bp_error);
 
     monitor_usb_changes();
 
