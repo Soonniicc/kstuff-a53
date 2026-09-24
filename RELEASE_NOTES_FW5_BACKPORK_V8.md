@@ -1,0 +1,13 @@
+## kstuff + A53/PPR + BackPork — FW 5.00 (v8 experimental)
+
+Este pré-lançamento reúne os patches A53/PPR, o kstuff e o BackPork em **um único ELF**. O BackPork é compilado no carregador, sem ELF embutido ou segundo processo: observa a criação de jogos, monta `app0/fakelib` sobre `common/lib` antes do `EXEC` e desmonta ao sair. Após o repouso, o monitor registra novamente `SceSysCore`; a notificação “BackPork active again!” aparece depois da primeira montagem antecipada bem-sucedida.
+
+A v8 corrige a primeira abertura intermitente observada na v7: o nome da pasta do sandbox era copiado após `closedir`, podendo formar um destino corrompido e causar `PRX_NOT_RESOLVED_FUNCTION`. Agora o nome é copiado antes de fechar o diretório.
+
+**Validação:** compilação com PS5 Payload SDK e `-Wall -Werror`. No log da v8 após repouso, `PPSA17221` e `PPSA28180` montaram antes do `EXEC` na primeira tentativa e desmontaram com `rc=0`. A primeira abertura da v8 após boot limpo ainda não foi verificada por log acessível. Outros firmwares não foram testados nesta integração. Esta é uma versão experimental.
+
+**Arquivo:** `kstuff-a53-backpork-RESUME-v8-FIXED-EXPERIMENTAL.elf`
+
+**SHA-256:** `3713495c9c4fe4ff819507e0b9c3490c7694adbe97dbaef8dc363339497da0f5`
+
+**Código e referências:** [EchoStretch/kstuff-lite](https://github.com/EchoStretch/kstuff-lite), [drakmor/ppr-patch](https://github.com/drakmor/ppr-patch), [BestPig/BackPork](https://github.com/BestPig/BackPork), [cragson/a53-code-exec](https://github.com/cragson/a53-code-exec). Detalhes em [`README.md`](README.md) e [`CREDITS.md`](CREDITS.md).

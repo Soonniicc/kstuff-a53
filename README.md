@@ -1,52 +1,52 @@
-# kstuff + A53/PPR
+# kstuff + A53/PPR + BackPork
+
+Payload experimental para PS5 **firmware 5.00**. O carregador instala/verifica os patches A53/PPR, inicia o kstuff e executa o monitor BackPork no mesmo processo. A compilação produz **um único ELF**: o BackPork é integrado em código-fonte, sem anexar outro ELF, fazer `fork` ou exigir um segundo envio.
 
 ## Download
 
-**[Baixar o ELF testado no FW 5.00](https://github.com/EliasSamuca/kstuff-a53/releases/download/fw5-tested-source/kstuff-a53-fast-klog-experimental.elf)** · [Ver informações da versão e código-fonte](https://github.com/EliasSamuca/kstuff-a53/releases/tag/fw5-tested-source)
+**[Baixar a v8 experimental com BackPork](https://github.com/EliasSamuca/kstuff-a53/releases/download/fw5-backpork-v8/kstuff-a53-backpork-RESUME-v8-FIXED-EXPERIMENTAL.elf)** · [Notas da versão e código-fonte](https://github.com/EliasSamuca/kstuff-a53/releases/tag/fw5-backpork-v8)
 
-SHA-256: `9d0cadca3664d861b1e7d23fef22ca6d9e5e20b4dc634e6a21b91238dbe68686`. A versão é experimental; veja na página da Release o firmware validado e as observações de compilação.
+SHA-256: `3713495c9c4fe4ff819507e0b9c3490c7694adbe97dbaef8dc363339497da0f5`.
 
-Integração em código-fonte do carregador **kstuff-lite** com a instalação dos patches **PPR/A53**. O resultado da compilação é um único `kstuff.elf`: a rotina A53/PPR é executada no início de `ps5-kstuff-ldr/src/main.c` e, após sucesso, o carregador inicia o kstuff. Não há um segundo ELF anexado ou executado internamente.
+A [versão anterior, somente kstuff+A53/PPR](https://github.com/EliasSamuca/kstuff-a53/releases/tag/fw5-tested-source), continua disponível separadamente. Ela não contém BackPork.
 
-Este repositório contém **somente kstuff + A53/PPR**. versao do Fkpg suportado ate a 11.40
+## Funcionamento
+
+1. O loader verifica o perfil exato do console e instala os patches PPR/A53. Se falhar, não inicia o kstuff.
+2. O kstuff é carregado normalmente. Um monitor BackPork nativo observa os processos criados pelo `SceSysCore`.
+3. Para jogos com `app0/fakelib`, o monitor monta essa pasta sobre `common/lib` antes do `EXEC` do jogo e desmonta quando o processo termina. Um bloqueio evita dois monitores desta integração na mesma sessão.
+4. Ao voltar do repouso, o monitor registra novamente o `SceSysCore`. A notificação **“BackPork active again!”** só aparece após a primeira montagem antecipada bem-sucedida depois do retorno. Ela confirma a montagem, não garante que todo jogo funcionará.
+
+O arquivo principal é [`ps5-kstuff-ldr/src/backpork.c`](ps5-kstuff-ldr/src/backpork.c). A rotina de energia fica em [`ps5-kstuff-ldr/src/ppr/ppr_resume.c`](ps5-kstuff-ldr/src/ppr/ppr_resume.c). A v8 corrigiu um acesso ao nome da pasta do sandbox depois de `closedir`, que na v7 podia produzir um caminho corrompido e falhar na primeira abertura. Veja [detalhes e logs dos testes](README_BACKPORK_DIRENT_V8.md).
 
 ## Estado dos testes
 
-- **PS5 firmware 5.00:** integração e inicialização do kstuff testadas no console.
-- Um teste manual mediu aproximadamente **4,54 s** entre enviar o ELF pelo loader e o kstuff iniciar. O tempo varia conforme o ambiente; não é uma garantia de desempenho.
-- Existem perfis adicionais em [`ps5-kstuff-ldr/src/ppr/ppr_profiles.inc`](ps5-kstuff-ldr/src/ppr/ppr_profiles.inc). A presença de um perfil no código **não** significa que esta integração tenha sido testada nesse firmware.
-- Uma compilação bem-sucedida confirma apenas que o código gerou o ELF; o funcionamento precisa ser validado no console correspondente.
+- FW 5.00: no log da v8 **após repouso**, `PPSA17221` e `PPSA28180` montaram `fakelib` antes do `EXEC` na primeira tentativa e desmontaram com `rc=0`. O monitor foi rearmado e o PPR foi verificado antes dos lançamentos.
+- Na v7, uma primeira abertura após boot limpo falhou por um caminho de montagem corrompido. A v8 corrige a causa no código e compilou sem erros, mas **o log pré-repouso da v8 ainda não pôde ser lido aqui**. A primeira abertura após boot limpo ainda precisa dessa confirmação específica.
+- Outros jogos, outros firmwares, ciclos prolongados de repouso e reinício com BackPork integrado não estão validados. Perfis adicionais no código não equivalem a testes nesses firmwares.
+
+Não carregue outro BackPork junto deste ELF. Os logs relevantes usam os prefixos `[TIME]`, `[PPR]` e `[BP]` no klog. `mounted before exec` e `unmount ... rc=0` são os sinais principais para a montagem do jogo.
 
 ## Compilação
 
-Requisitos: Linux ou contêiner Linux, `make`, `git` e [PS5 Payload SDK](https://github.com/ps5-payload-dev/sdk). Os submódulos Git precisam estar presentes.
+Requisitos: Linux ou contêiner Linux, `make`, `git`, [PS5 Payload SDK](https://github.com/ps5-payload-dev/sdk) e os submódulos Git do projeto.
 
 ```bash
 git clone --recurse-submodules https://github.com/EliasSamuca/kstuff-a53.git
 cd kstuff-a53
+git checkout fw5-backpork-v8
 export PS5_PAYLOAD_SDK=/opt/ps5-payload-sdk
 ./ci-ps5-kstuff-ldr.sh
 ```
 
-O arquivo gerado fica em `ps5-kstuff-ldr/kstuff.elf`. Se o SDK estiver em outro local, ajuste `PS5_PAYLOAD_SDK`. Para entrar no contêiner usado durante o desenvolvimento pelo PowerShell: `docker exec -it ps5-dev bash`.
+O resultado fica em `ps5-kstuff-ldr/kstuff.elf`. Ajuste `PS5_PAYLOAD_SDK` se o SDK estiver em outro local. O hash acima identifica o ELF disponibilizado no pré-lançamento; compilações locais podem gerar hash diferente.
 
-## Sequência de execução
+## Origens, créditos e licença
 
-1. O loader inicializa a comunicação A53 e verifica o perfil PPR correspondente ao firmware e ao tipo de console.
-2. Instala e verifica os patches PPR. Uma falha interrompe a inicialização do kstuff.
-3. Carrega o payload do kstuff e aplica as etapas normais do loader.
+- [EchoStretch/kstuff-lite](https://github.com/EchoStretch/kstuff-lite): base do kstuff; histórico original preservado, commit-base `2506a5b15af501734f7ea3dce2759c077cdb76c6`.
+- [drakmor/ppr-patch](https://github.com/drakmor/ppr-patch): base da instalação PPR/A53, adaptada ao loader.
+- [BestPig/BackPork](https://github.com/BestPig/BackPork): base do monitor de jogos e da montagem `fakelib`, adaptada para o mesmo processo do loader.
+- [cragson/a53-code-exec](https://github.com/cragson/a53-code-exec): referência técnica de A53; o PoC não é empacotado como ELF interno.
+- [ps5-payload-dev/sdk](https://github.com/ps5-payload-dev/sdk): ferramenta de compilação externa.
 
-Os tempos de cada etapa podem ser observados no klog com prefixo `[TIME]` e, quando disponível, em `/data/kstuff-startup.log`.
-
-## Origens e créditos
-
-- [EchoStretch/kstuff-lite](https://github.com/EchoStretch/kstuff-lite): projeto base e histórico Git preservado neste fork; base usada: `2506a5b15af501734f7ea3dce2759c077cdb76c6`.
-- [drakmor/ppr-patch](https://github.com/drakmor/ppr-patch): referência e código da instalação dos patches PPR, adaptados para a inicialização pelo loader. Consulte os avisos de licença desse projeto.
-- [cragson/a53-code-exec](https://github.com/cragson/a53-code-exec): referência técnica para a pesquisa A53; o PoC original não é empacotado como um ELF adicional aqui.
-- [ps5-payload-dev/sdk](https://github.com/ps5-payload-dev/sdk): ferramenta de compilação, instalada separadamente.
-
-Detalhes da atribuição estão em [`CREDITS.md`](CREDITS.md). A documentação técnica da base original está preservada em [`docs/KSTUFF_UPSTREAM.md`](docs/KSTUFF_UPSTREAM.md). Mantenha os avisos de copyright e licença presentes nos arquivos de origem e nos submódulos.
-
-## Observações
-
-Este projeto é experimental e destinado à pesquisa e a testes em consoles próprios. Antes de testar outra versão de firmware, confirme o perfil exato no código e faça validação específica nesse console.
+Veja [`CREDITS.md`](CREDITS.md), [`LICENSE`](LICENSE) e as licenças dos submódulos. O projeto destina-se a pesquisa e testes em consoles próprios.
