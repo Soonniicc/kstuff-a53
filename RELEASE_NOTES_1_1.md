@@ -15,4 +15,4 @@ A versão 1.1 corrige uma primeira abertura intermitente observada em testes ant
 
 **SHA-256:** `3713495c9c4fe4ff819507e0b9c3490c7694adbe97dbaef8dc363339497da0f5`
 
-**Código e referências:** [EchoStretch/kstuff-lite](https://github.com/EchoStretch/kstuff-lite), [drakmor/ppr-patch](https://github.com/drakmor/ppr-patch), [BestPig/BackPork](https://github.com/BestPig/BackPork), [cragson/a53-code-exec](https://github.com/cragson/a53-code-exec). Detalhes em [`README.md`](README.md) e [`CREDITS.md`](CREDITS.md).
+**Créditos:** BackPork foi criado por [BestPig](https://github.com/BestPig/BackPork). Esta integração também se baseia em [EchoStretch/kstuff-lite](https://github.com/EchoStretch/kstuff-lite), [drakmor/ppr-patch](https://github.com/drakmor/ppr-patch) e [cragson/a53-code-exec](https://github.com/cragson/a53-code-exec). Detalhes em [`README.md`](README.md) e [`CREDITS.md`](CREDITS.md).
