@@ -1,5 +1,10 @@
 ## kstuff + A53/PPR + BackPork — FW 5.00 (versão 1.1 experimental)
 
+### Adicionado na versão 1.1
+
+- **Modo de repouso:** após o console acordar, o PPR é verificado novamente e o monitor BackPork registra de novo o `SceSysCore`.
+- **BackPork nativo:** integrado diretamente ao código-fonte do carregador, em um único ELF. Monta `app0/fakelib` antes de executar jogos compatíveis e desmonta ao fechá-los.
+
 Este pré-lançamento reúne os patches A53/PPR, o kstuff e o BackPork em **um único ELF**. O BackPork é compilado no carregador, sem ELF embutido ou segundo processo: observa a criação de jogos, monta `app0/fakelib` sobre `common/lib` antes do `EXEC` e desmonta ao sair. Após o repouso, o monitor registra novamente `SceSysCore`; a notificação “BackPork active again!” aparece depois da primeira montagem antecipada bem-sucedida.
 
 A versão 1.1 corrige uma primeira abertura intermitente observada em testes anteriores: o nome da pasta do sandbox era copiado após `closedir`, podendo formar um destino corrompido e causar `PRX_NOT_RESOLVED_FUNCTION`. Agora o nome é copiado antes de fechar o diretório.
