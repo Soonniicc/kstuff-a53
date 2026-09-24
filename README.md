@@ -4,11 +4,11 @@ Payload experimental para PS5 **firmware 5.00**. O carregador instala/verifica o
 
 ## Download
 
-**[Baixar a v8 experimental com BackPork](https://github.com/EliasSamuca/kstuff-a53/releases/download/fw5-backpork-v8/kstuff-a53-backpork-RESUME-v8-FIXED-EXPERIMENTAL.elf)** · [Notas da versão e código-fonte](https://github.com/EliasSamuca/kstuff-a53/releases/tag/fw5-backpork-v8)
+**[Baixar a versão 1.1 experimental com BackPork](https://github.com/Soonniicc/kstuff-a53/releases/download/1.1/kstuff-a53-fast-native.elf)** · [Notas da versão e código-fonte](https://github.com/Soonniicc/kstuff-a53/releases/tag/1.1)
 
 SHA-256: `3713495c9c4fe4ff819507e0b9c3490c7694adbe97dbaef8dc363339497da0f5`.
 
-A [versão anterior, somente kstuff+A53/PPR](https://github.com/EliasSamuca/kstuff-a53/releases/tag/fw5-tested-source), continua disponível separadamente. Ela não contém BackPork.
+A [versão anterior, somente kstuff+A53/PPR](https://github.com/Soonniicc/kstuff-a53/releases/tag/fw5-tested-source), continua disponível separadamente. Ela não contém BackPork.
 
 ## Funcionamento
 
@@ -17,12 +17,12 @@ A [versão anterior, somente kstuff+A53/PPR](https://github.com/EliasSamuca/kstu
 3. Para jogos com `app0/fakelib`, o monitor monta essa pasta sobre `common/lib` antes do `EXEC` do jogo e desmonta quando o processo termina. Um bloqueio evita dois monitores desta integração na mesma sessão.
 4. Ao voltar do repouso, o monitor registra novamente o `SceSysCore`. A notificação **“BackPork active again!”** só aparece após a primeira montagem antecipada bem-sucedida depois do retorno. Ela confirma a montagem, não garante que todo jogo funcionará.
 
-O arquivo principal é [`ps5-kstuff-ldr/src/backpork.c`](ps5-kstuff-ldr/src/backpork.c). A rotina de energia fica em [`ps5-kstuff-ldr/src/ppr/ppr_resume.c`](ps5-kstuff-ldr/src/ppr/ppr_resume.c). A v8 corrigiu um acesso ao nome da pasta do sandbox depois de `closedir`, que na v7 podia produzir um caminho corrompido e falhar na primeira abertura. Veja [detalhes e logs dos testes](README_BACKPORK_DIRENT_V8.md).
+O arquivo principal é [`ps5-kstuff-ldr/src/backpork.c`](ps5-kstuff-ldr/src/backpork.c). A rotina de energia fica em [`ps5-kstuff-ldr/src/ppr/ppr_resume.c`](ps5-kstuff-ldr/src/ppr/ppr_resume.c). A versão 1.1 corrige um acesso ao nome da pasta do sandbox depois de `closedir`, que em testes anteriores podia produzir um caminho corrompido e falhar na primeira abertura. Veja as [notas do lançamento](RELEASE_NOTES_1_1.md).
 
 ## Estado dos testes
 
-- FW 5.00: no log da v8 **após repouso**, `PPSA17221` e `PPSA28180` montaram `fakelib` antes do `EXEC` na primeira tentativa e desmontaram com `rc=0`. O monitor foi rearmado e o PPR foi verificado antes dos lançamentos.
-- Na v7, uma primeira abertura após boot limpo falhou por um caminho de montagem corrompido. A v8 corrige a causa no código e compilou sem erros, mas **o log pré-repouso da v8 ainda não pôde ser lido aqui**. A primeira abertura após boot limpo ainda precisa dessa confirmação específica.
+- FW 5.00: no log da versão 1.1 **após repouso**, `PPSA17221` e `PPSA28180` montaram `fakelib` antes do `EXEC` na primeira tentativa e desmontaram com `rc=0`. O monitor foi rearmado e o PPR foi verificado antes dos lançamentos.
+- Em teste anterior, uma primeira abertura após boot limpo falhou por um caminho de montagem corrompido. A versão 1.1 corrige a causa no código e compilou sem erros, mas **o log pré-repouso desta versão ainda não pôde ser lido aqui**. A primeira abertura após boot limpo ainda precisa dessa confirmação específica.
 - Outros jogos, outros firmwares, ciclos prolongados de repouso e reinício com BackPork integrado não estão validados. Perfis adicionais no código não equivalem a testes nesses firmwares.
 
 Não carregue outro BackPork junto deste ELF. Os logs relevantes usam os prefixos `[TIME]`, `[PPR]` e `[BP]` no klog. `mounted before exec` e `unmount ... rc=0` são os sinais principais para a montagem do jogo.
@@ -32,9 +32,9 @@ Não carregue outro BackPork junto deste ELF. Os logs relevantes usam os prefixo
 Requisitos: Linux ou contêiner Linux, `make`, `git`, [PS5 Payload SDK](https://github.com/ps5-payload-dev/sdk) e os submódulos Git do projeto.
 
 ```bash
-git clone --recurse-submodules https://github.com/EliasSamuca/kstuff-a53.git
+git clone --recurse-submodules https://github.com/Soonniicc/kstuff-a53.git
 cd kstuff-a53
-git checkout fw5-backpork-v8
+git checkout 1.1
 export PS5_PAYLOAD_SDK=/opt/ps5-payload-sdk
 ./ci-ps5-kstuff-ldr.sh
 ```
