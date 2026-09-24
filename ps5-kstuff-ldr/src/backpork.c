@@ -167,7 +167,14 @@ static char* find_random_folder(const char* title_id, int sandbox_num) {
 }
 
 /* Adapted from BestPig/BackPork. Keep all work in the loader ELF process. */
-static char *try_mount_game(pid_t pid, const char *title) {
+#define MAX_BP_GAMES 64
+typedef struct {
+    pid_t pid;
+    char *mount_path;
+} bp_game_t;
+
+static char *try_mount_game(pid_t pid, const char *title,
+                            const bp_game_t *games) {
     int number = find_highest_sandbox_number(title);
     if (number < 0) return NULL;
     char sandbox[14], app0[PATH_MAX];
@@ -180,121 +187,121 @@ static char *try_mount_game(pid_t pid, const char *title) {
         return NULL;
     char *folder = find_random_folder(title, number);
     if (!folder) return NULL;
+    char target[PATH_MAX];
+    snprintf(target, sizeof(target), "/mnt/sandbox/%s/%s/common/lib",
+             sandbox, folder);
+    for (int i = 0; i < MAX_BP_GAMES; ++i) {
+        if (games[i].mount_path && !strcmp(games[i].mount_path, target)) {
+            BP_LOG("mount already active pid=%d dst=%s\n", pid, target);
+            free(folder);
+            return NULL;
+        }
+    }
     char *mounted = mount_fakelibs(sandbox, app0, pid, folder);
     free(folder);
     return mounted;
 }
 
-#define MAX_BP_WORKERS 16
-static volatile int workers;
-
-static void *watch_game(void *opaque) {
-    pid_t pid = (pid_t)(intptr_t)opaque;
-    int kq = kqueue();
-    if (kq < 0) goto done;
-    struct kevent change, event;
-    EV_SET(&change, pid, EVFILT_PROC, EV_ADD | EV_ENABLE | EV_CLEAR,
-           NOTE_EXEC | NOTE_EXIT, 0, NULL);
-    if (kevent(kq, &change, 1, NULL, 0, NULL) < 0) {
-        BP_LOG("process watch failed pid=%d errno=%d\n", pid, errno);
-        close(kq);
-        goto done;
+static bp_game_t *game_slot(bp_game_t *games, pid_t pid, int create) {
+    bp_game_t *free_slot = NULL;
+    for (int i = 0; i < MAX_BP_GAMES; ++i) {
+        if (games[i].pid == pid) return &games[i];
+        if (!games[i].pid && !free_slot) free_slot = &games[i];
     }
-    BP_LOG("exec watch armed pid=%d\n", pid);
-    struct timespec timeout = {5, 0};
-    int event_count = kevent(kq, NULL, 0, &event, 1, &timeout);
-    if (event_count <= 0 || (event.fflags & NOTE_EXIT) ||
-        !(event.fflags & NOTE_EXEC)) {
-        BP_LOG("exec not observed pid=%d events=%d flags=0x%x\n",
-               pid, event_count, event_count > 0 ? event.fflags : 0);
-        close(kq);
-        goto done;
+    if (create && free_slot) {
+        free_slot->pid = pid;
+        return free_slot;
     }
-    BP_LOG("exec observed pid=%d\n", pid);
-    char title[10] = {0};
-    char *mounted = NULL;
-    struct timespec pause = {0, 1000000};
-    /* Match the original BackPork's post-exec mount point. */
-    for (int attempt = 0; attempt < 100; ++attempt) {
-        struct timespec zero = {0, 0};
-        int pending = kevent(kq, NULL, 0, &event, 1, &zero);
-        if (pending > 0 && (event.fflags & NOTE_EXIT)) break;
-        app_info_t info = {0};
-        if (sceKernelGetAppInfo(pid, &info) == 0) {
-            memcpy(title, info.title_id, 9);
-            if (strncmp(title, "PPSA", 4) && strncmp(title, "CUSA", 4))
-                break;
-            mounted = try_mount_game(pid, title);
-            if (mounted) {
-                BP_LOG("mounted after exec pid=%d title=%s attempt=%d dst=%s\n",
-                       pid, title, attempt, mounted);
-                break;
-            }
-        }
-        nanosleep(&pause, NULL);
-    }
-    if (!mounted && (!strncmp(title, "PPSA", 4) ||
-                     !strncmp(title, "CUSA", 4)))
-        BP_LOG("post-exec mount missed pid=%d title=%s\n", pid, title);
-    if (mounted) {
-        while (kevent(kq, NULL, 0, &event, 1, NULL) > 0) {
-            if (event.fflags & NOTE_EXIT) break;
-        }
-        /* Unmount before SysCore tries to remove common/lib. Never rmdir it. */
-        int rc = unmount(mounted, 0);
-        BP_LOG("unmount pid=%d rc=%d errno=%d dst=%s\n", pid, rc,
-               rc ? errno : 0, mounted);
-        free(mounted);
-    }
-    close(kq);
-done:
-    __sync_sub_and_fetch(&workers, 1);
     return NULL;
 }
 
+static void release_game(bp_game_t *game) {
+    if (game->mount_path) {
+        int rc = unmount(game->mount_path, 0);
+        BP_LOG("unmount pid=%d rc=%d errno=%d dst=%s\n", game->pid,
+               rc, rc ? errno : 0, game->mount_path);
+        free(game->mount_path);
+    }
+    game->mount_path = NULL;
+    game->pid = 0;
+}
+
 int backpork_main(void) {
-    BP_LOG("native monitor started pid=%d\n", getpid());
+    BP_LOG("native NOTE_TRACK monitor started pid=%d\n", getpid());
     for (;;) {
         pid_t syscore = find_pid("SceSysCore.elf");
         if (syscore < 0) { sleep(1); continue; }
         int kq = kqueue();
         if (kq < 0) { sleep(1); continue; }
         struct kevent change;
+        /* The original BackPork receives inherited child events on this kq. */
         EV_SET(&change, syscore, EVFILT_PROC,
                EV_ADD | EV_ENABLE | EV_CLEAR,
-               NOTE_FORK | NOTE_TRACK | NOTE_EXIT, 0, NULL);
+               NOTE_FORK | NOTE_EXEC | NOTE_TRACK | NOTE_EXIT, 0, NULL);
         if (kevent(kq, &change, 1, NULL, 0, NULL) < 0) {
             BP_LOG("syscore watch failed pid=%d errno=%d\n", syscore, errno);
             close(kq);
             sleep(1);
             continue;
         }
+        bp_game_t games[MAX_BP_GAMES] = {0};
         BP_LOG("monitor active syscore=%d\n", syscore);
         for (;;) {
             struct kevent event;
             int n = kevent(kq, NULL, 0, &event, 1, NULL);
-            if (n < 0) break;
+            if (n < 0) {
+                BP_LOG("monitor event failed errno=%d\n", errno);
+                break;
+            }
             if (!n) continue;
-            if (event.ident == (uintptr_t)syscore &&
-                (event.fflags & NOTE_EXIT)) break;
-            if (!(event.fflags & NOTE_CHILD)) continue;
             pid_t pid = (pid_t)event.ident;
-            if (__sync_add_and_fetch(&workers, 1) > MAX_BP_WORKERS) {
-                __sync_sub_and_fetch(&workers, 1);
-                BP_LOG("worker limit reached pid=%d\n", pid);
+            if (pid == syscore && (event.fflags & NOTE_EXIT)) {
+                BP_LOG("syscore exited pid=%d\n", syscore);
+                break;
+            }
+            if (event.fflags & NOTE_CHILD) {
+                if (!game_slot(games, pid, 1))
+                    BP_LOG("game table full pid=%d\n", pid);
+                else
+                    BP_LOG("child tracked pid=%d\n", pid);
+            }
+            if (event.fflags & NOTE_EXIT) {
+                bp_game_t *game = game_slot(games, pid, 0);
+                if (game) release_game(game);
                 continue;
             }
-            pthread_t thread;
-            int err = pthread_create(&thread, NULL, watch_game,
-                                     (void *)(intptr_t)pid);
-            if (err) {
-                __sync_sub_and_fetch(&workers, 1);
-                BP_LOG("worker failed pid=%d error=%d\n", pid, err);
-            } else {
-                pthread_detach(thread);
-                BP_LOG("child detected pid=%d\n", pid);
+            if (event.fflags & NOTE_EXEC) {
+                bp_game_t *game = game_slot(games, pid, 0);
+                if (game && !game->mount_path) {
+                    app_info_t info = {0};
+                    if (sceKernelGetAppInfo(pid, &info) == 0) {
+                        char title[10] = {0};
+                        memcpy(title, info.title_id, 9);
+                        if (!strncmp(title, "PPSA", 4) ||
+                            !strncmp(title, "CUSA", 4)) {
+                            for (int attempt = 0; attempt < 20; ++attempt) {
+                                game->mount_path = try_mount_game(pid, title, games);
+                                if (game->mount_path) {
+                                    BP_LOG("mounted inherited pid=%d attempt=%d dst=%s\n",
+                                           pid, attempt, game->mount_path);
+                                    break;
+                                }
+                                struct timespec pause = {0, 1000000};
+                                nanosleep(&pause, NULL);
+                            }
+                            if (!game->mount_path)
+                                BP_LOG("inherited mount missed pid=%d title=%s\n",
+                                       pid, title);
+                        }
+                    } else {
+                        BP_LOG("app info unavailable pid=%d errno=%d\n",
+                               pid, errno);
+                    }
+                }
             }
         }
+        for (int i = 0; i < MAX_BP_GAMES; ++i)
+            if (games[i].pid) release_game(&games[i]);
         close(kq);
         sleep(1);
     }
