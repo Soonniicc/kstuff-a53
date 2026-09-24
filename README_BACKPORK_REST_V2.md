@@ -21,3 +21,12 @@ Build com SDK PS5 no Docker: sucesso, `-Wall -Werror`. ELF PIE x86-64 gerado; SH
 **Ainda não validado no PS5.** O ponto decisivo no klog é `[BP] mounted early` antes de qualquer `PRX_NOT_RESOLVED_FUNCTION`, seguido de `[BP] unmount ... rc=0` após fechar o jogo. Se `early mount missed` aparecer, o monitor não conseguiu montar a tempo. Faça o primeiro teste em boot limpo, com um único envio do ELF, e capture o klog desde o envio até o fechamento do jogo. O resultado de reinício e repouso desta integração permanece desconhecido.
 
 BackPork: [BestPig/BackPork](https://github.com/BestPig/BackPork), GPL-3.0. Kstuff: [EchoStretch/kstuff-lite](https://github.com/EchoStretch/kstuff-lite).
+
+## Resultado no console em 2026-09-23
+
+**Esta versão NÃO é considerada estável. Não reutilizar como build de uso diário.**
+
+- Teste 1 (`putty-test1.log`): o kstuff e um `backpork.elf` separado já estavam carregados. Os dois monitores montaram `fakelib` sobre o mesmo `common/lib`; o jogo abriu, mas o sistema registrou falhas de limpeza do sandbox após o fechamento. Portanto, este teste não valida a versão única isoladamente.
+- Teste 2 (`putty-teste2-freezer.log`): após reiniciar, havia apenas o monitor do ELF único. A montagem antecipada ocorreu com `attempt=0`, antes do `EXEC` de `PPSA28180`; o jogo chegou a iniciar e usar save data. Não há `PRX_NOT_RESOLVED_FUNCTION`. Mais tarde o log mostra início da sequência de standby e depois `sceLncServiceKeepAlive` congelado e espera por `AppStateLock`. Não há `NOTE_EXIT` do jogo nem `unmount` no trecho capturado, porque o jogo foi suspenso, não encerrado. O log não prova que a montagem causou o bloqueio; também há `ajmBatchWait` preso em `SceShellUI` antes de o monitor BackPork iniciar. O usuário precisou forçar o desligamento.
+
+Próxima investigação: confirmar em que momento visual ocorreu o congelamento e comparar, em boot limpo, a mesma sequência de jogo/standby com a base A53+kstuff sem BackPork. Não gerar outro build por mera alteração de temporização sem evidência para separar os caminhos de ShellUI, PPR e montagem.
