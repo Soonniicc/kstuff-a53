@@ -15,6 +15,7 @@
 #include <unistd.h>
 #include <stdarg.h>
 #include <ps5/klog.h>
+extern void notify(const char *fmt, ...);
 
 #include <sys/mount.h>
 #include <sys/stat.h>
@@ -169,6 +170,14 @@ static char* find_random_folder(const char* title_id, int sandbox_num) {
 
 /* Adapted from BestPig/BackPork. Keep all work in the loader ELF process. */
 #define MAX_BP_GAMES 64
+static unsigned bp_resume_generation;
+
+void backpork_request_resume_rearm(void) {
+    unsigned generation = __atomic_add_fetch(&bp_resume_generation, 1,
+                                              __ATOMIC_SEQ_CST);
+    BP_LOG("resume: rearm requested generation=%u\n", generation);
+}
+
 typedef struct {
     pid_t pid;
     char *mount_path;
@@ -237,6 +246,8 @@ int backpork_main(void) {
         return -1;
     }
     BP_LOG("native singleton monitor started pid=%d\n", getpid());
+    unsigned last_armed_generation = 0;
+    unsigned confirmed_generation = 0;
     for (;;) {
         pid_t syscore = find_pid("SceSysCore.elf");
         if (syscore < 0) { sleep(1); continue; }
@@ -254,10 +265,34 @@ int backpork_main(void) {
             continue;
         }
         bp_game_t games[MAX_BP_GAMES] = {0};
+        unsigned armed_generation = __atomic_load_n(&bp_resume_generation,
+                                                     __ATOMIC_SEQ_CST);
         BP_LOG("monitor active syscore=%d\n", syscore);
+        if (armed_generation != last_armed_generation)
+            BP_LOG("resume: BackPork monitor rearmed syscore=%d generation=%u\n",
+                   syscore, armed_generation);
+        last_armed_generation = armed_generation;
+        int resume_rearm = 0;
+        int rearm_deferred = 0;
         for (;;) {
+            if (__atomic_load_n(&bp_resume_generation,
+                                __ATOMIC_SEQ_CST) != armed_generation) {
+                int active_mount = 0;
+                for (int i = 0; i < MAX_BP_GAMES; ++i)
+                    if (games[i].mount_path) active_mount = 1;
+                if (!active_mount) {
+                    BP_LOG("resume: rebuilding SysCore watch\n");
+                    resume_rearm = 1;
+                    break;
+                }
+                if (!rearm_deferred) {
+                    BP_LOG("resume: rearm deferred until game exits\n");
+                    rearm_deferred = 1;
+                }
+            }
             struct kevent event;
-            int n = kevent(kq, NULL, 0, &event, 1, NULL);
+            struct timespec wait = {0, 250000000};
+            int n = kevent(kq, NULL, 0, &event, 1, &wait);
             if (n < 0) {
                 BP_LOG("monitor event failed errno=%d\n", errno);
                 break;
@@ -308,6 +343,12 @@ int backpork_main(void) {
                             if (game->mount_path) {
                                 BP_LOG("mounted before exec pid=%d title=%s attempt=%d dst=%s\n",
                                        pid, title, attempt, game->mount_path);
+                                if (armed_generation > confirmed_generation) {
+                                    BP_LOG("resume: BackPork early mount confirmed generation=%u title=%s\n",
+                                           armed_generation, title);
+                                    notify("BackPork active again!");
+                                    confirmed_generation = armed_generation;
+                                }
                                 break;
                             }
                             struct timespec pause = {0, 1000000};
@@ -352,7 +393,7 @@ int backpork_main(void) {
         for (int i = 0; i < MAX_BP_GAMES; ++i)
             if (games[i].pid) release_game(&games[i]);
         close(kq);
-        sleep(1);
+        if (!resume_rearm) sleep(1);
     }
     return 0;
 }

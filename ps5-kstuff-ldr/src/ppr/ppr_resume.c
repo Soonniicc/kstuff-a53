@@ -25,6 +25,7 @@ extern int sceKernelOpenEventFlag(power_event_t *event, const char *name);
 extern int sceKernelPollEventFlag(power_event_t event, uint64_t bits,
                                   unsigned int mode, uint64_t *result);
 extern int sceKernelCloseEventFlag(power_event_t event);
+extern void backpork_request_resume_rearm(void);
 
 typedef struct app_info {
     uint32_t app_id;
@@ -143,6 +144,7 @@ static void *power_monitor(void *unused) {
                 stable = idle = 0;
                 saw_sleep = 0;
                 klog_printf("[PPR] resume: WORKING observed; waiting for idle\n");
+                backpork_request_resume_rearm();
             }
             if (pending) {
                 if (stable < STABLE_WORKING_POLLS)
