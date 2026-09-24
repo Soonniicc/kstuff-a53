@@ -107,6 +107,33 @@ static char *mount_fakelibs(const char *sandbox_id, const char *cwd, pid_t pid, 
 
     snprintf(fake_mount_path, PATH_MAX + 1, "/mnt/sandbox/%s/%s/common/lib", sandbox_id, random_folder);
 
+    struct stat target_st;
+    struct statfs target_fs;
+    if (stat(fake_mount_path, &target_st) != 0) {
+        BP_LOG("fakelib target stat failed pid=%d dst=%s errno=%d\n",
+               pid, fake_mount_path, errno);
+        free(fake_mount_path);
+        return NULL;
+    }
+    if (!S_ISDIR(target_st.st_mode)) {
+        BP_LOG("fakelib target is not a directory pid=%d dst=%s\n",
+               pid, fake_mount_path);
+        free(fake_mount_path);
+        return NULL;
+    }
+    if (statfs(fake_mount_path, &target_fs) != 0) {
+        BP_LOG("fakelib target mount check failed pid=%d dst=%s errno=%d\n",
+               pid, fake_mount_path, errno);
+        free(fake_mount_path);
+        return NULL;
+    }
+    if (strcmp(target_fs.f_mntonname, fake_mount_path) == 0) {
+        BP_LOG("preserving existing sandbox mount pid=%d dst=%s type=%s\n",
+               pid, fake_mount_path, target_fs.f_fstypename);
+        free(fake_mount_path);
+        return NULL;
+    }
+
     int res = mount2(fake_path, fake_mount_path, "unionfs");
     if (res != 0) {
         BP_LOG("unionfs mount failed pid=%d errno=%d dst=%s\n", pid, errno, fake_mount_path);

@@ -80,6 +80,26 @@ static int automount_disabled(void) {
     return access("/data/.kstuff_noautomount", F_OK) == 0;
 }
 
+/* Never replace a title that the console already installed on extended storage. */
+static int native_extended_title(const char *title_id) {
+    static const char *const roots[] = {
+        "/mnt/ext0/user/app", "/mnt/ext1/user/app"
+    };
+    for (size_t i = 0; i < sizeof(roots) / sizeof(roots[0]); ++i) {
+        char path[PATH_MAX];
+        int n = snprintf(path, sizeof(path), "%s/%s", roots[i], title_id);
+        if (n < 0 || (size_t)n >= sizeof(path)) return -1;
+        struct stat st;
+        if (stat(path, &st) == 0) {
+            if (S_ISDIR(st.st_mode)) return 1;
+        } else if (errno != ENOENT && errno != ENOTDIR) {
+            klog_printf("Extended title check failed: %s errno=%d\n", path, errno);
+            return -1;
+        }
+    }
+    return 0;
+}
+
 static int mount_source(const char* src_path, char* out_mounted_path,
                         bool* out_temporary_mount)
 {
@@ -201,9 +221,22 @@ static int bind_mount_title(const char* title_id, const char* src)
     }
 
     snprintf(dst, sizeof(dst), "/system_ex/app/%s", title_id);
-    if (is_mounted(dst)) {
-        /* Persistent directories are not proof that nullfs is still active. */
-        return 0;
+    int extended = native_extended_title(title_id);
+    if (extended != 0) {
+        klog_printf("Skipping loader bind for extended title %s (state=%d)\n",
+                    title_id, extended);
+        return extended > 0 ? 0 : -1;
+    }
+    struct statfs dst_fs;
+    if (statfs(dst, &dst_fs) == 0) {
+        if (strcmp(dst_fs.f_mntonname, dst) == 0) {
+            klog_printf("Preserving existing title mount: %s (%s)\n",
+                        dst, dst_fs.f_fstypename);
+            return 0;
+        }
+    } else if (errno != ENOENT) {
+        klog_perror("Cannot check title mount; refusing bind");
+        return -1;
     }
 
     if (mount_source(src, mounted_src, &temporary_mount) != 0) {
@@ -228,9 +261,6 @@ static int bind_mount_title(const char* title_id, const char* src)
         return -1;
     }
 
-    if (unmount(dst, 0) != 0 && errno != EINVAL && errno != ENOENT) {
-        klog_perror("Failed to unmount partially mounted title");
-    }
 
     if (mkdir(dst, 0755) == 0) {
         created_dst = true;
