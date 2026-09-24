@@ -278,23 +278,44 @@ int backpork_main(void) {
                 if (!game) {
                     BP_LOG("game table full pid=%d\n", pid);
                 } else {
-                    app_info_t info = {0};
-                    if (sceKernelGetAppInfo(pid, &info) == 0) {
-                        char title[10] = {0};
-                        memcpy(title, info.title_id, 9);
-                        if (!strncmp(title, "PPSA", 4) ||
-                            !strncmp(title, "CUSA", 4)) {
-                            for (int attempt = 0; attempt < 20; ++attempt) {
-                                game->mount_path = try_mount_game(pid, title, games);
-                                if (game->mount_path) {
-                                    BP_LOG("mounted before exec pid=%d title=%s attempt=%d dst=%s\n",
-                                           pid, title, attempt, game->mount_path);
-                                    break;
-                                }
-                                struct timespec pause = {0, 1000000};
-                                nanosleep(&pause, NULL);
+                    app_info_t info;
+                    char title[10] = {0};
+                    int game_title_ready = 0;
+                    /*
+                     * NOTE_CHILD may arrive before AppInfo has a title ID.
+                     * A single lookup can miss the only pre-EXEC mount window.
+                     */
+                    for (int attempt = 0; attempt < 20; ++attempt) {
+                        memset(&info, 0, sizeof(info));
+                        if (sceKernelGetAppInfo(pid, &info) == 0) {
+                            memcpy(title, info.title_id, 9);
+                            title[9] = 0;
+                            if (!strncmp(title, "PPSA", 4) ||
+                                !strncmp(title, "CUSA", 4)) {
+                                game_title_ready = 1;
+                                break;
                             }
                         }
+                        struct timespec pause = {0, 1000000};
+                        nanosleep(&pause, NULL);
+                    }
+                    if (!game_title_ready) {
+                        BP_LOG("child title not ready pid=%d last=%s\n",
+                               pid, title[0] ? title : "(empty)");
+                    } else {
+                        for (int attempt = 0; attempt < 50; ++attempt) {
+                            game->mount_path = try_mount_game(pid, title, games);
+                            if (game->mount_path) {
+                                BP_LOG("mounted before exec pid=%d title=%s attempt=%d dst=%s\n",
+                                       pid, title, attempt, game->mount_path);
+                                break;
+                            }
+                            struct timespec pause = {0, 1000000};
+                            nanosleep(&pause, NULL);
+                        }
+                        if (!game->mount_path)
+                            BP_LOG("before-exec mount missed pid=%d title=%s\n",
+                                   pid, title);
                     }
                 }
             }
