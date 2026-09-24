@@ -194,18 +194,31 @@ static void *watch_game(void *opaque) {
     if (kq < 0) goto done;
     struct kevent change, event;
     EV_SET(&change, pid, EVFILT_PROC, EV_ADD | EV_ENABLE | EV_CLEAR,
-           NOTE_EXIT, 0, NULL);
+           NOTE_EXEC | NOTE_EXIT, 0, NULL);
     if (kevent(kq, &change, 1, NULL, 0, NULL) < 0) {
-        BP_LOG("exit watch failed pid=%d errno=%d\n", pid, errno);
+        BP_LOG("process watch failed pid=%d errno=%d\n", pid, errno);
         close(kq);
         goto done;
     }
+    BP_LOG("exec watch armed pid=%d\n", pid);
+    struct timespec timeout = {5, 0};
+    int event_count = kevent(kq, NULL, 0, &event, 1, &timeout);
+    if (event_count <= 0 || (event.fflags & NOTE_EXIT) ||
+        !(event.fflags & NOTE_EXEC)) {
+        BP_LOG("exec not observed pid=%d events=%d flags=0x%x\n",
+               pid, event_count, event_count > 0 ? event.fflags : 0);
+        close(kq);
+        goto done;
+    }
+    BP_LOG("exec observed pid=%d\n", pid);
     char title[10] = {0};
     char *mounted = NULL;
-    struct timespec zero = {0, 0}, pause = {0, 2000000};
-    for (int attempt = 0; attempt < 250; ++attempt) {
-        int n = kevent(kq, NULL, 0, &event, 1, &zero);
-        if (n > 0 && (event.fflags & NOTE_EXIT)) break;
+    struct timespec pause = {0, 1000000};
+    /* Match the original BackPork's post-exec mount point. */
+    for (int attempt = 0; attempt < 100; ++attempt) {
+        struct timespec zero = {0, 0};
+        int pending = kevent(kq, NULL, 0, &event, 1, &zero);
+        if (pending > 0 && (event.fflags & NOTE_EXIT)) break;
         app_info_t info = {0};
         if (sceKernelGetAppInfo(pid, &info) == 0) {
             memcpy(title, info.title_id, 9);
@@ -213,7 +226,7 @@ static void *watch_game(void *opaque) {
                 break;
             mounted = try_mount_game(pid, title);
             if (mounted) {
-                BP_LOG("mounted early pid=%d title=%s attempt=%d dst=%s\n",
+                BP_LOG("mounted after exec pid=%d title=%s attempt=%d dst=%s\n",
                        pid, title, attempt, mounted);
                 break;
             }
@@ -222,7 +235,7 @@ static void *watch_game(void *opaque) {
     }
     if (!mounted && (!strncmp(title, "PPSA", 4) ||
                      !strncmp(title, "CUSA", 4)))
-        BP_LOG("early mount missed pid=%d title=%s\n", pid, title);
+        BP_LOG("post-exec mount missed pid=%d title=%s\n", pid, title);
     if (mounted) {
         while (kevent(kq, NULL, 0, &event, 1, NULL) > 0) {
             if (event.fflags & NOTE_EXIT) break;
