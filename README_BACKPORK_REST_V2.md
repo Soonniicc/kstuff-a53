@@ -34,3 +34,7 @@ Próxima investigação: confirmar em que momento visual ocorreu o congelamento 
 ## Esclarecimento do usuário
 
 O usuário **não solicitou modo de repouso no teste 2**. Após carregar o ELF e abrir o jogo, a imagem congelou enquanto o áudio continuou normal; só depois ele forçou o desligamento. Portanto, a sequência `Timed out. Start standby sequence` é posterior ao congelamento percebido e não deve ser tratada como seu gatilho. O primeiro indício de bloqueio no log é `ajmBatchWait` em `SceShellUI` durante a etapa A53/PPR, antes de `[BP] native monitor started`. O jogo ainda executou e acessou save data após `[BP] mounted early`; o log não identifica o instante exato em que a imagem deixou de atualizar. A causa permanece indeterminada. Teste 1 também teve dois monitores sobrepostos e, apesar de o usuário relatar que o jogo funcionou, terminou com erros de limpeza `common/lib`.
+
+## Controle válido para PPSA28180
+
+O usuário esclareceu que `PPSA28180` depende de BackPork. Testá-lo apenas com kstuff+A53 não é um controle válido. Outro jogo sem necessidade de BackPork funciona normalmente com kstuff+A53, o que sustenta que a base geral funciona, mas não isola a interação com `PPSA28180`. O controle que falta é **boot limpo, kstuff+A53 estável e BackPork original em processos separados, depois PPSA28180**, com o mesmo comportamento observado (vídeo e áudio) e klog. O teste integrado que sobrepôs dois monitores não substitui esse controle.
